@@ -1,21 +1,24 @@
 from http.server import BaseHTTPRequestHandler, HTTPServer
+from http.client import HTTPConnection
+
+cur = 0
 
 class handler(BaseHTTPRequestHandler):
-    def _set_response(self):
-        self.send_response(200)
-        self.end_headers()
-
     def do_GET(self):
-        self._set_response()
+        self.send_response(200)
+        self.send_header("cur", str(cur))
+        self.send_header("host", "1")
+        self.end_headers()
         self.wfile.write("GET request for {}".format(self.path).encode('utf-8'))
 
     def do_POST(self):
-        content_length = int(self.headers['Content-Length']) # <--- Gets the size of data
-        post_data = self.rfile.read(content_length) # <--- Gets the data itself
-        logging.info("POST request,\nPath: %s\nHeaders:\n%s\n\nBody:\n%s\n",
-                str(self.path), str(self.headers), post_data.decode('utf-8'))
-
-        self._set_response()
+        cur = int(self.headers["cur"]) + 1
+        dst = (int(self.headers["host"]) + 2) % 3
+        src = (int(self.headers["host"]) + 1) % 3
+        conn = HTTPConnection("h{}".format(dst), 8000)
+        conn.request("POST", "h{}".format(dst), headers={"cur": cur, "host": src})
+        response = conn.getresponse()
+        conn.close()
         self.wfile.write("POST request for {}".format(self.path).encode('utf-8'))
 
 
