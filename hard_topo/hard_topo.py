@@ -1,11 +1,17 @@
+from functools import partial
+
+from mininet.cli import CLI
 from mininet.topo import Topo
+from mininet.net import Mininet
+from mininet.node import CPULimitedHost, RemoteController
+from mininet.link import TCLink
 
 class MyTopo( Topo ):
-    def __init__( self ):
+    def build( self ):
         "Create custom topo."
 
         # Initialize topology
-        Topo.__init__( self )
+        #Topo.__init__( self )
 
         # Add hosts and switches
         h1 = self.addHost( 'h1' )
@@ -30,7 +36,7 @@ class MyTopo( Topo ):
         s10 = self.addSwitch( 's10' )
 
         # Add links
-        self.addLink( s1, s2 )
+        self.addLink( s1, s2, bw=10)
         self.addLink( s1, s3 )
         self.addLink( s1, s4 )
         self.addLink( s1, s5 )
@@ -65,5 +71,15 @@ class MyTopo( Topo ):
         self.addLink( h9, s9 )
         self.addLink( h10, s10 )
 
+topos = { 'mytopo': MyTopo }
 
-topos = { 'mytopo': ( lambda: MyTopo() ) }
+if __name__ == '__main__':
+    topo = MyTopo()
+    net = Mininet( topo=topo,
+	           host=CPULimitedHost, link=TCLink,
+                   controller=partial( RemoteController, ip='127.0.0.1', port=6633 ),
+                   autoSetMacs=True)
+    net.start()
+    CLI(net)
+    net.stop()
+

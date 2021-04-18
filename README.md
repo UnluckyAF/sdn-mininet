@@ -9,6 +9,8 @@
     ssh -Y mininet@mininet-vm - подключаемся из двух терминалов
     pox/pox.py --verbose openflow.spanning_tree --no-flood --hold-down openflow.discovery forwarding.l2_multi -
     запускаем контроллер на одном терминале  
+
+    sudo python ~/mininet/custom/hard_topo.py ИЛИ
     sudo mn --custom ~/mininet/custom/hard_topo.py --topo mytopo --controller remote --switch ovsk --mac - запускаем сам
     mininet с нужной топологией
 
