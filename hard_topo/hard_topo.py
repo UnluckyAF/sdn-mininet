@@ -1,5 +1,8 @@
 from functools import partial
 
+from mininet.node import ( Host, OVSKernelSwitch, DefaultController)
+from mininet.log import info, error, debug, output, warn
+from mininet.link import Link, Intf
 from mininet.cli import CLI
 from mininet.topo import Topo
 from mininet.net import Mininet
@@ -73,10 +76,54 @@ class MyTopo( Topo ):
 
 topos = { 'mytopo': MyTopo }
 
+class MyMininet(Mininet):
+    def __init__( self, topo=None, switch=OVSKernelSwitch, host=Host,
+                  controller=DefaultController, link=Link, intf=Intf,
+                  build=True, xterms=False, cleanup=False, ipBase='10.0.0.0/8',
+                  inNamespace=False,
+                  autoSetMacs=False, autoStaticArp=False, autoPinCpus=False,
+                  listenPort=None, waitConnected=False, count=1 ):
+        super(MyMininet, self).__init__(topo, switch, host, controller, link, intf, build,
+                         xterms, cleanup, ipBase, inNamespace, autoSetMacs,
+                         autoStaticArp, autoPinCpus, listenPort, waitConnected)
+        self.count = count
+    def pingFull( self, hosts=None, timeout=None ):
+        """Ping between all specified hosts and return all data.
+           hosts: list of hosts
+           timeout: time to wait for a response, as string
+           returns: all ping data; see function body."""
+        # should we check if running?
+        # Each value is a tuple: (src, dsd, [all ping outputs])
+        all_outputs = []
+        if not hosts:
+            hosts = self.hosts
+            output( '*** Ping: testing ping reachability\n' )
+        for node in hosts:
+            output( '%s -> ' % node.name )
+            for dest in hosts:
+                if node != dest:
+                    opts = ''
+                    if timeout:
+                        opts = '-W %s' % timeout
+                    result = node.cmd( 'ping -c%d %s %s' % (self.count, opts, dest.IP()) )
+                    outputs = self._parsePingFull( result )
+                    sent, received, rttmin, rttavg, rttmax, rttdev = outputs
+                    all_outputs.append( (node, dest, outputs) )
+                    output( ( '%s ' % dest.name ) if received else 'X ' )
+            output( '\n' )
+        output( "*** Results: \n" )
+        for outputs in all_outputs:
+            src, dest, ping_outputs = outputs
+            sent, received, rttmin, rttavg, rttmax, rttdev = ping_outputs
+            output( " %s->%s: %s/%s, " % (src, dest, sent, received ) )
+            output( "rtt min/avg/max/mdev %0.3f/%0.3f/%0.3f/%0.3f ms\n" %
+                    (rttmin, rttavg, rttmax, rttdev) )
+        return all_outputs
+
 if __name__ == '__main__':
     topo = MyTopo()
-    net = Mininet( topo=topo,
-	           host=CPULimitedHost, link=TCLink,
+    net = MyMininet( count=3, topo=topo,
+                   host=CPULimitedHost, link=TCLink,
                    controller=partial( RemoteController, ip='127.0.0.1', port=6633 ),
                    autoSetMacs=True)
     net.start()

@@ -1,18 +1,19 @@
 # Запуск
 
-    run VirtualBox
-    start Mininet-VM
-    login + password mininet
+run VirtualBox  
+start Mininet-VM  
+login + password mininet
 
-    ---
+    ssh -Y mininet@mininet-vm
+подключаемся из двух терминалов
 
-    ssh -Y mininet@mininet-vm - подключаемся из двух терминалов
-    pox/pox.py --verbose openflow.spanning_tree --no-flood --hold-down log.level --DEBUG samples.pretty_log openflow.discovery forwarding.l2_multi info.packet_dump -
-    запускаем контроллер на одном терминале 
+    pox/pox.py --verbose openflow.spanning_tree --no-flood --hold-down log.level --DEBUG samples.pretty_log openflow.discovery forwarding.l2_learning info.packet_dump
+
+запускаем контроллер на одном терминале (можно использовать l2_multi, но не вижу в этом смысла)
 
     sudo python ~/mininet/custom/hard_topo.py ИЛИ
-    sudo mn --custom ~/mininet/custom/hard_topo.py --topo mytopo --controller remote --switch ovsk --mac - запускаем сам
-    mininet с нужной топологией
+    sudo mn --custom ~/mininet/custom/hard_topo.py --topo mytopo --controller remote --switch ovsk --mac
+запускаем сам mininet с нужной топологией
 
 Если запустить pox как выше, потом mininet, подождать spanning tree, пустить pingall, выключить pox, запустить снова как выше, подождать spanning tree, пустить pingall - все пинги проходят
 

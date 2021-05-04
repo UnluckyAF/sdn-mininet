@@ -5,6 +5,7 @@ import argparse
 import logging
 import queue
 import random
+import threading
 import time
 
 
@@ -102,6 +103,7 @@ def run(server_class=HTTPServer, handler_class=handler, init=False):
         p.start()
     server_address = ('', 8000)
     httpd = server_class(server_address, handler_class)
+    threading.Thread(target=poster, daemon=True).start()
     logging.info("RUNNING")
     httpd.serve_forever()
     q.join()
