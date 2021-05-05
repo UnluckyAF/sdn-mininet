@@ -1,10 +1,13 @@
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from http.client import HTTPConnection
 from multiprocessing import Process, Manager
+
 import argparse
 import logging
+import os
 import queue
 import random
+import sys
 import threading
 import time
 
@@ -47,11 +50,6 @@ class handler(BaseHTTPRequestHandler):
         logging.info("in POST: %s", post_body)
         self.wfile.write("ok {}".format(post_body).encode('utf-8'))
 
-        if host_num == -1:
-            host_num = int(self.headers["dst"])
-        elif host_num != int(self.headers["dst"]):
-            logging.error("wrong host dst from %d", self.headers["src"])
-
         dst = 0
         for k in path:
             sr, me = k.split("/")
@@ -59,22 +57,25 @@ class handler(BaseHTTPRequestHandler):
                 dst = path[k]
                 break
 
-        logging.debug("host_num=%d, dst=%d", host_num, dst) 
+        logging.debug("host_num=%d, dst=%d", host_num, dst)
+        if host_num==dst:
+            return
         q.put({"body": post_body, "dst": dst})
-        
 
-def spam():
+
+def spam(dst):
     global host_num
     while True:
-        logging.debug("about to start connection 10.0.0.2")
-        conn = HTTPConnection("10.0.0.2", 8000)
+        logging.debug("about to start connection 10.0.0.{}".format(dst))
+        conn = HTTPConnection("10.0.0.{}".format(dst), 8000)
         conn.set_debuglevel(1)
-        logging.debug("posting to 10.0.0.2, dst: 1")
-        conn.request("POST", "", body="test", headers={"src": host_num, "dst": 1})
+        logging.debug("posting to 10.0.0.{}".format(dst))
+        logging.debug("host_num=%d, dst=%d", host_num, dst)
+        conn.request("POST", "", body="test", headers={"src": host_num, "dst": dst - 1})
         response = conn.getresponse()
         logging.debug("STATUS: %s, REASON: %s", response.status, response.reason)
         time.sleep(0.2)
-        logging.debug("about to CLOSE connection 10.0.0.2")
+        logging.debug("about to CLOSE connection 10.0.0.{}".format(dst))
         conn.close()
 
 
@@ -82,24 +83,33 @@ def poster():
     global host_num
     while True:
         post = q.get()
-        logging.debug("about to start connection 10.0.0.{}".format(post["dst"] + 1))
-        conn = HTTPConnection("10.0.0.{}".format(post["dst"] + 1), 8000)
-        conn.set_debuglevel(1)
-        logging.debug("posting to dst: {}".format(post["dst"]))
-        conn.request("POST", "", body=post["body"], headers={"src": host_num, "dst": post["dst"]})
-        response = conn.getresponse()
-        q.task_done()
-        logging.debug("STATUS: %s, REASON: %s", response.status, response.reason)
+        try:
+            logging.debug("about to start connection 10.0.0.{}".format(post["dst"] + 1))
+            conn = HTTPConnection("10.0.0.{}".format(post["dst"] + 1), 8000)
+            conn.set_debuglevel(1)
+            logging.debug("posting to dst: {}".format(post["dst"]))
+            conn.request("POST", "", body=post["body"], headers={"src": host_num, "dst": post["dst"]})
+            response = conn.getresponse()
+            q.task_done()
+            logging.debug("STATUS: %s, REASON: %s", response.status, response.reason)
+        except:
+            logging.error("err: %s", sys.exc_info()[0])
         logging.debug("about to CLOSE connection 10.0.0.{}".format(post["dst"] + 1))
         conn.close()
 
 
-def run(server_class=HTTPServer, handler_class=handler, init=False):
+def get_my_addr():
+    stream = os.popen("ifconfig | grep -o -e '10\.0\.0\.[0-9]*'")
+    return stream.read()
+
+
+def run(server_class=HTTPServer, handler_class=handler, init=-1):
     global host_num
-    if init:
+    host_num = int(get_my_addr().split('.')[-1]) - 1
+    logging.debug("%s", get_my_addr())
+    if init != -1:
         logging.info("INITIATOR")
-        host_num = 0
-        p = Process(target=spam, daemon=True)
+        p = Process(target=spam, daemon=True, args=(init, ))
         p.start()
     server_address = ('', 8000)
     httpd = server_class(server_address, handler_class)
@@ -111,7 +121,8 @@ def run(server_class=HTTPServer, handler_class=handler, init=False):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='http server doing something.')
-    parser.add_argument("--init", action="store_true", help="if true the server is an initiator.")
+    parser.add_argument("--init", type=int, default=-1, help="pass destination host number to make this host an \
+            initiator.")
     parser.add_argument("--log-level", default=logging.INFO, type=lambda x: getattr(logging, x), help="Configure the logging level.")
     args = parser.parse_args()
     logging.basicConfig(level=args.log_level)
