@@ -120,6 +120,8 @@ class MyMininet(Mininet):
                     (rttmin, rttavg, rttmax, rttdev) )
         return all_outputs
 
+
+
 if __name__ == '__main__':
     topo = MyTopo()
     net = MyMininet( count=3, topo=topo,

@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from http.client import HTTPConnection
 from multiprocessing import Process, Manager
@@ -100,7 +102,10 @@ def poster():
 
 def get_my_addr():
     stream = os.popen("ifconfig | grep -o -e '10\.0\.0\.[0-9]*'")
-    return stream.read()
+    res = stream.read()
+    if res == '':
+        return '0'
+    return res
 
 
 def run(server_class=HTTPServer, handler_class=handler, init=-1):
