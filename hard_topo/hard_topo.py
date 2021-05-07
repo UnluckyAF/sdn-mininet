@@ -1,7 +1,7 @@
 from functools import partial
 
 from mininet.node import ( Host, OVSKernelSwitch, DefaultController)
-from mininet.log import info, error, debug, output, warn
+from mininet.log import output
 from mininet.link import Link, Intf
 from mininet.cli import CLI
 from mininet.topo import Topo
