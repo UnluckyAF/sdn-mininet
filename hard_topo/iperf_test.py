@@ -1,13 +1,14 @@
 from functools import partial
-from time import time
+from time import time, sleep
 from select import poll, POLLIN
 from subprocess import Popen, PIPE
+import sys
 import os
 
 from mininet.node import CPULimitedHost, RemoteController
 from mininet.link import TCLink
 from mininet.log import info, setLogLevel, output
-from mininet.util import decode
+from util import decode
 
 from controller import POXBridge
 from hard_topo import MyTopo, MyMininet
@@ -49,6 +50,7 @@ def monitorFiles( outfiles, seconds, timeoutms ):
 
 def runServ(hosts, inits):
     cmd = "%s/hard_server/serv.py --log-level 'DEBUG'" % os.environ['HOME']
+    outfiles, errfiles = {}, {}
     for host in hosts:
         # Create and/or erase output files
         outfiles[ host ] = '/tmp/%s.out' % host.name
@@ -58,16 +60,16 @@ def runServ(hosts, inits):
         if int(host.name[1:]) in inits:
             continue
         host.cmdPrint(cmd,
-                '>', outfiles[ h ],
-                '2>', errfiles[ h ],
+                '>', outfiles[ host],
+                '2>', errfiles[ host ],
                 '&')
 
     for host in hosts:
         if int(host.name[1:]) in inits:
             cmd += " --init %d" % inits[int(host.name[1:])]
             host.cmdPrint(cmd,
-                '>', outfiles[ h ],
-                '2>', errfiles[ h ],
+                '>', outfiles[ host ],
+                '2>', errfiles[ host ],
                 '&')
     return outfiles, errfiles
 
@@ -92,13 +94,13 @@ def iperfTest( inits, seconds=5 ):
     net = MyMininet( count=3, topo=topo,
                    host=CPULimitedHost, link=TCLink,
                    controller=partial( RemoteController, ip='127.0.0.1', port=6633 ),
-                   autoSetMacs=True, waitConnected=True)
+                   autoSetMacs=True, waitConnected=False)
     net.start()
-    #pox = POXBriedge(ip='127.0.0.1', port=6613)
-    #pox.start()
+    pox = POXBridge('c0', ip='127.0.0.1', port=6613)
+    pox.start()
+    sleep(30)
     hosts = net.hosts
     info( "Starting test...\n" )
-    #outfiles, errfiles = {}, {}
     net.pingAll()
     runIperfs(net, hosts, seconds)
     outfiles, errfiles = runServ(hosts, inits)
@@ -113,7 +115,7 @@ def iperfTest( inits, seconds=5 ):
     #for h, line in monitorFiles( outfiles, seconds, timeoutms=500 ):
     #    if h:
     #        info( '%s: %s\n' % ( h.name, line ) )
-    #pox.stop()
+    pox.stop()
     stopServ(hosts)
     net.stop()
 
