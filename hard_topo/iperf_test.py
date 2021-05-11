@@ -48,7 +48,7 @@ def monitorFiles( outfiles, seconds, timeoutms ):
     devnull.close()  # Not really necessary
 
 
-def runServ(hosts, inits):
+def runServ(hosts):
     cmd = "%s/hard_server/serv.py --log-level 'DEBUG'" % os.environ['HOME']
     outfiles, errfiles = {}, {}
     for host in hosts:
@@ -57,18 +57,8 @@ def runServ(hosts, inits):
         errfiles[ host ] = '/tmp/%s.err' % host.name
         host.cmd( 'echo >', outfiles[ host ] )
         host.cmd( 'echo >', errfiles[ host ] )
-        if int(host.name[1:]) in inits:
-            continue
         host.cmdPrint(cmd,
                 '>', outfiles[ host],
-                '2>', errfiles[ host ],
-                '&')
-
-    for host in hosts:
-        if int(host.name[1:]) in inits:
-            cmd += " --init %d" % inits[int(host.name[1:])]
-            host.cmdPrint(cmd,
-                '>', outfiles[ host ],
                 '2>', errfiles[ host ],
                 '&')
     return outfiles, errfiles
@@ -89,7 +79,7 @@ def runIperfs(net, hosts, seconds):
             output("%s - %s iperf: %s\n" % (h1.name, h2.name, net.iperf( (h1, h2), seconds=seconds )))
 
 
-def iperfTest( inits, seconds=5 ):
+def iperfTest( seconds=5 ):
     topo = MyTopo()
     net = MyMininet( count=3, topo=topo,
                    host=CPULimitedHost, link=TCLink,
@@ -98,12 +88,12 @@ def iperfTest( inits, seconds=5 ):
     net.start()
     pox = POXBridge('c0', ip='127.0.0.1', port=6613)
     pox.start()
-    sleep(30)
+    sleep(15)
     hosts = net.hosts
     info( "Starting test...\n" )
     net.pingAll()
-    runIperfs(net, hosts, seconds)
-    outfiles, errfiles = runServ(hosts, inits)
+    #runIperfs(net, hosts, seconds)
+    outfiles, errfiles = runServ(hosts)
     info( "Monitoring output for", seconds * 10, "seconds\n" )
     for h, line in monitorFiles( outfiles, seconds * 10, timeoutms=500 ):
         if h:
@@ -122,6 +112,4 @@ def iperfTest( inits, seconds=5 ):
 
 if __name__ == '__main__':
     setLogLevel('info')
-    iperfTest({
-        1: 2
-        })
+    iperfTest()

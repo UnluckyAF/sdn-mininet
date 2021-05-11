@@ -10,7 +10,10 @@ class POXBridge( RemoteController ):
                 '--verbose openflow.spanning_tree',
                 '--no-flood --hold-down',
                 'log.level --DEBUG samples.pretty_log',
-                'openflow.discovery forwarding.l2_learning info.packet_dump &'
+                'openflow.discovery forwarding.l2_learning info.packet_dump',
+                '>', "/tmp/c0out",
+                '2>', "/tmp/c0err",
+                '&'
                 )
     def stop( self ):
         "Stop POX"
