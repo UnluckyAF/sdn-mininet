@@ -13,72 +13,86 @@ import sys
 import threading
 import time
 
+from parse_input import parse_inits
 
-host_num = -1
+
+host_num = 0
 q = queue.Queue()
 
-class handler(BaseHTTPRequestHandler):
-    global host_num
-    print(host_num)
-    host_num = host_num
-
-    def do_GET(self):
+def get_handler(paths, h):
+    class handler(h):
         global host_num
-        print("GET")
-        self.send_response(200)
-        self.send_header('Content-type', 'text-html')
-        self.send_header("host", str(host_num))
-        self.end_headers()
+        print(host_num)
+        host_num = host_num
 
-    def do_POST(self):
-        path = {
-            "0/1": 2,
-            "1/2": 0,
-            "2/0": 3,
-            "0/3": 4,
-            "3/4": 5,
-            "4/5": 6,
-            "5/6": 3,
-            "6/3": 7,
-            "3/7": 8,
-            "7/8": 3,
-            "8/3": 9
-        }
-        global host_num
-        self.send_response(200)
-        self.end_headers()
-        content_len = int(self.headers.get('Content-Length'))
-        post_body = self.rfile.read(content_len)
-        logging.info("in POST: %s", post_body)
-        self.wfile.write("ok {}".format(post_body).encode('utf-8'))
+        def get_paths(self):
+            return paths
 
-        dst = 0
-        for k in path:
-            sr, me = k.split("/")
-            if sr == self.headers["src"] and me == str(host_num):
-                dst = path[k]
-                break
+        def do_GET(self):
+            global host_num
+            print("GET")
+            self.send_response(200)
+            self.send_header('Content-type', 'text-html')
+            self.send_header("host", str(host_num))
+            self.end_headers()
 
-        logging.debug("host_num=%d, dst=%d", host_num, dst)
-        if host_num==dst:
-            return
-        q.put({"body": post_body, "dst": dst})
+        def do_POST(self):
+            #path = {
+            #    "0/1": 2,
+            #    "1/2": 0,
+            #    "2/0": 3,
+            #    "0/3": 4,
+            #    "3/4": 5,
+            #    "4/5": 6,
+            #    "5/6": 3,
+            #    "6/3": 7,
+            #    "3/7": 8,
+            #    "7/8": 3,
+            #    "8/3": 9
+            #}
+            global host_num
+            paths = self.get_paths()
+            self.send_response(200)
+            self.end_headers()
+            content_len = int(self.headers.get('Content-Length'))
+            post_body = self.rfile.read(content_len)
+            logging.info("in POST: %s", post_body)
+            self.wfile.write("ok {}".format(post_body).encode('utf-8'))
+
+            dst = 0
+            random.shuffle(paths)
+            for path in paths:
+                for k in path:
+                    sr, me = k.split("/")
+                    if sr == self.headers["src"] and me == str(host_num):
+                        dst = path[k]
+                        break
+
+            logging.debug("host_num=%d, dst=%d", host_num, dst)
+            if host_num==dst:
+                return
+            q.put({"body": post_body, "dst": dst})
+    return handler
 
 
-def spam(dst):
+def post_mes(dst, host_num, body):
+    logging.debug("about to start connection 10.0.0.{}".format(dst))
+    conn = HTTPConnection("10.0.0.{}".format(dst), 8000)
+    conn.set_debuglevel(1)
+    logging.debug("posting to 10.0.0.{}".format(dst))
+    logging.debug("host_num=%d, dst=%d", host_num, dst)
+    conn.request("POST", "", body=body, headers={"src": host_num, "dst": dst})
+    response = conn.getresponse()
+    logging.debug("STATUS: %s, REASON: %s", response.status, response.reason)
+    logging.debug("about to CLOSE connection 10.0.0.{}".format(dst))
+    conn.close()
+
+
+def spam(dst, tickrate):
     global host_num
     while True:
-        logging.debug("about to start connection 10.0.0.{}".format(dst))
-        conn = HTTPConnection("10.0.0.{}".format(dst), 8000)
-        conn.set_debuglevel(1)
-        logging.debug("posting to 10.0.0.{}".format(dst))
-        logging.debug("host_num=%d, dst=%d", host_num, dst)
-        conn.request("POST", "", body="test", headers={"src": host_num, "dst": dst - 1})
-        response = conn.getresponse()
-        logging.debug("STATUS: %s, REASON: %s", response.status, response.reason)
-        time.sleep(0.2)
-        logging.debug("about to CLOSE connection 10.0.0.{}".format(dst))
-        conn.close()
+        time.sleep(tickrate)
+        post_mes(dst, host_num, "test")
 
 
 def poster():
@@ -86,18 +100,10 @@ def poster():
     while True:
         post = q.get()
         try:
-            logging.debug("about to start connection 10.0.0.{}".format(post["dst"] + 1))
-            conn = HTTPConnection("10.0.0.{}".format(post["dst"] + 1), 8000)
-            conn.set_debuglevel(1)
-            logging.debug("posting to dst: {}".format(post["dst"]))
-            conn.request("POST", "", body=post["body"], headers={"src": host_num, "dst": post["dst"]})
-            response = conn.getresponse()
+            post_mes(post["dst"], host_num, post["body"])
             q.task_done()
-            logging.debug("STATUS: %s, REASON: %s", response.status, response.reason)
         except:
             logging.error("err: %s", sys.exc_info()[0])
-        logging.debug("about to CLOSE connection 10.0.0.{}".format(post["dst"] + 1))
-        conn.close()
 
 
 def get_my_addr():
@@ -108,16 +114,33 @@ def get_my_addr():
     return res
 
 
-def run(server_class=HTTPServer, handler_class=handler, init=-1):
+def get_path_init(flows):
+    paths = list()
+    inits = dict()
+    for flow in flows:
+        path_with_start, tickrate = flow[0], flow[1]
+        paths.append(path_with_start[0])
+        if path_with_start[1][0] not in inits:
+            inits[path_with_start[1][0]] = list()
+        inits[path_with_start[1][0]].append((path_with_start[1][1], tickrate))
+    return paths, inits
+
+
+
+
+def run(server_class=HTTPServer, handler_class=BaseHTTPRequestHandler, flows_path="flows"):
     global host_num
-    host_num = int(get_my_addr().split('.')[-1]) - 1
+    host_num = int(get_my_addr().split('.')[-1])
     logging.debug("%s", get_my_addr())
-    if init != -1:
+    paths, inits = get_path_init(parse_inits(flows_path))
+    print(inits)
+    if host_num in inits:
         logging.info("INITIATOR")
-        p = Process(target=spam, daemon=True, args=(init, ))
-        p.start()
+        for init in inits[host_num]:
+            p = threading.Thread(target=spam, daemon=True, args=init)
+            p.start()
     server_address = ('', 8000)
-    httpd = server_class(server_address, handler_class)
+    httpd = server_class(server_address, get_handler(paths, handler_class))
     threading.Thread(target=poster, daemon=True).start()
     logging.info("RUNNING")
     httpd.serve_forever()
@@ -126,11 +149,15 @@ def run(server_class=HTTPServer, handler_class=handler, init=-1):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='http server doing something.')
-    parser.add_argument("--init", type=int, default=-1, help="pass destination host number to make this host an \
-            initiator.")
+    #parser.add_argument("--init", type=int, default=-1, help="pass destination host number to make this host an \
+    #        initiator.")
+    #parser.add_argument("--matrix", default="matrix.csv", help="Adjacency matrix in csv format with bandwidth as
+    #        weights.")
+    parser.add_argument("--flows", default="flows", help="Flows with path and tickrate, file without extension.")
     parser.add_argument("--log-level", default=logging.INFO, type=lambda x: getattr(logging, x), help="Configure the logging level.")
     args = parser.parse_args()
     logging.basicConfig(level=args.log_level)
-    init = args.init
+    #init = args.init
 
-    run(init=init)
+    #run(matrix_path=args.matrix, flows_path=args.flows)
+    run(flows_path=args.flows)
