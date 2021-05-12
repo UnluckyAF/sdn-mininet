@@ -16,10 +16,6 @@ from parse_input import parse_matrix
 class MyTopo( Topo ):
     def build( self ):
         "Create custom topo."
-
-        # Initialize topology
-        #Topo.__init__( self )
-
         switches = list()
         links = parse_matrix("matrix.csv")
         for i in range(len(links)):
@@ -99,11 +95,15 @@ class MyMininet(Mininet):
         m = re.findall( r, iperfOutput )
         if m:
             tmp = map(lambda x: x.split(' ')[0], m)
-            mmin = min(map(float, tmp))
-            mmax = max(map(float, tmp))
-            avg = sum(map(float, tmp)) / len(m)
-            med = median(map(float, tmp))
-            return [mmin, avg, mmax, med]
+            tmp2 = list()
+            for elem in tmp:
+                if float(elem) != 0:
+                    tmp2.append(elem)
+            mmin = min(map(float, tmp2))
+            mmax = max(map(float, tmp2))
+            avg = sum(map(float, tmp2)) / len(tmp2)
+            med = median(map(float, tmp2))
+            return ([mmin, avg, mmax, med], m[-1])
         else:
             # was: raise Exception(...)
             error( 'could not parse iperf output: ' + iperfOutput )
@@ -127,8 +127,8 @@ class MyMininet(Mininet):
         hosts = hosts or [ self.hosts[ 0 ], self.hosts[ -1 ] ]
         assert len( hosts ) == 2
         client, server = hosts
-        output( '*** Iperf: testing', l4Type, 'bandwidth between',
-                client, 'and', server, '\n' )
+        #output( '*** Iperf: testing', l4Type, 'bandwidth between',
+                #client, 'and', server, '\n' )
         server.cmd( 'killall -9 iperf' )
         iperfArgs = 'iperf -p %d ' % port
         bwArgs = ''
@@ -156,11 +156,13 @@ class MyMininet(Mininet):
         server.sendInt()
         servout += server.waitOutput()
         debug( 'Server output: %s\n' % servout )
-        result = [ self._parseIperf( servout ), self._parseIperf( cliout ) ]
+        parsed_serv = self._parseIperf( servout )
+        parsed_client = self._parseIperf( cliout )
+        result = [parsed_serv[0], parsed_client[0]]
         if l4Type == 'UDP':
             result.insert( 0, udpBw )
         output( '*** Results (min, avg, max, median): %s\n' % result )
-        return result
+        return (result, parsed_serv[1])
 
 
 if __name__ == '__main__':

@@ -17,12 +17,13 @@ from parse_input import parse_inits
 
 
 host_num = 0
+posted = 0
+spamed = 0
 q = queue.Queue()
 
 def get_handler(paths, h):
     class handler(h):
         global host_num
-        print(host_num)
         host_num = host_num
 
         def get_paths(self):
@@ -37,19 +38,6 @@ def get_handler(paths, h):
             self.end_headers()
 
         def do_POST(self):
-            #path = {
-            #    "0/1": 2,
-            #    "1/2": 0,
-            #    "2/0": 3,
-            #    "0/3": 4,
-            #    "3/4": 5,
-            #    "4/5": 6,
-            #    "5/6": 3,
-            #    "6/3": 7,
-            #    "3/7": 8,
-            #    "7/8": 3,
-            #    "8/3": 9
-            #}
             global host_num
             paths = self.get_paths()
             self.send_response(200)
@@ -88,11 +76,18 @@ def post_mes(dst, host_num, body):
     conn.close()
 
 
-def spam(dst, tickrate):
+def spam(dst, tickrate, start, lifetime):
     global host_num
+    time.sleep(start)
+    start_time = time.time()
     while True:
         time.sleep(tickrate)
         post_mes(dst, host_num, "test")
+        spamed += 1
+        cur_time = time.time()
+        if cur_time - start_time >= lifetime:
+            logging.info("%d - %d: stopped" % (host_num, dst))
+            return
 
 
 def poster():
@@ -102,6 +97,7 @@ def poster():
         try:
             post_mes(post["dst"], host_num, post["body"])
             q.task_done()
+            posted += 1
         except:
             logging.error("err: %s", sys.exc_info()[0])
 
@@ -118,14 +114,12 @@ def get_path_init(flows):
     paths = list()
     inits = dict()
     for flow in flows:
-        path_with_start, tickrate = flow[0], flow[1]
+        path_with_start, tickrate, start, lifetime = flow[0], flow[1], flow[2], flow[3]
         paths.append(path_with_start[0])
         if path_with_start[1][0] not in inits:
             inits[path_with_start[1][0]] = list()
-        inits[path_with_start[1][0]].append((path_with_start[1][1], tickrate))
+        inits[path_with_start[1][0]].append((path_with_start[1][1], tickrate, start, lifetime))
     return paths, inits
-
-
 
 
 def run(server_class=HTTPServer, handler_class=BaseHTTPRequestHandler, flows_path="flows"):
@@ -133,7 +127,6 @@ def run(server_class=HTTPServer, handler_class=BaseHTTPRequestHandler, flows_pat
     host_num = int(get_my_addr().split('.')[-1])
     logging.debug("%s", get_my_addr())
     paths, inits = get_path_init(parse_inits(flows_path))
-    print(inits)
     if host_num in inits:
         logging.info("INITIATOR")
         for init in inits[host_num]:
@@ -144,20 +137,15 @@ def run(server_class=HTTPServer, handler_class=BaseHTTPRequestHandler, flows_pat
     threading.Thread(target=poster, daemon=True).start()
     logging.info("RUNNING")
     httpd.serve_forever()
+    logging.info("in", posted, "out", spamed)
     q.join()
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='http server doing something.')
-    #parser.add_argument("--init", type=int, default=-1, help="pass destination host number to make this host an \
-    #        initiator.")
-    #parser.add_argument("--matrix", default="matrix.csv", help="Adjacency matrix in csv format with bandwidth as
-    #        weights.")
     parser.add_argument("--flows", default="flows", help="Flows with path and tickrate, file without extension.")
     parser.add_argument("--log-level", default=logging.INFO, type=lambda x: getattr(logging, x), help="Configure the logging level.")
     args = parser.parse_args()
     logging.basicConfig(level=args.log_level)
-    #init = args.init
 
-    #run(matrix_path=args.matrix, flows_path=args.flows)
     run(flows_path=args.flows)

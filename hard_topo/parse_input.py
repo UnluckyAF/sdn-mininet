@@ -1,9 +1,7 @@
 import csv
 
 
-# [(host_num, bandwidth), ...]
 def parse_row(row, num):
-    print(row)
     assert len(row) == num
 
     links = list()
@@ -14,12 +12,6 @@ def parse_row(row, num):
     return links
 
 
-# input: adjacency matrix with weight as bandwidth
-# returns:
-# [
-#  [(host_num, bandwidth), ...],
-#  [(host_num, bandwidth), ...]
-# ]
 def parse_matrix(path):
     res = []
     with open(path) as csvfile:
@@ -44,20 +36,12 @@ def path_to_map(path):
     return (res, (int(verts[0]), int(verts[1])))
 
 
-# input:
-# path tickrate(s)
-# 2/3/0/7\t0.2
-# returns:
-# [
-#  ((map_path --- {...}, (initiator --- int, its_destination --- int)), tickrate --- float),
-#  ...
-# }
 def parse_inits(path):
     paths = list()
     with open(path, "r") as f:
         for line in f:
             print(line)
-            pth, tick = line.split('\t')
-            paths.append((path_to_map(pth), float(tick)))
-            print("hui")
+            pth, tick, start, lifetime = line.split('\t')
+            paths.append((path_to_map(pth), float(tick), float(start), float(lifetime)))
     return paths
+

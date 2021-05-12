@@ -2,8 +2,9 @@ from functools import partial
 from time import time, sleep
 from select import poll, POLLIN
 from subprocess import Popen, PIPE
-import sys
 import os
+import sys
+import threading
 
 from mininet.node import CPULimitedHost, RemoteController
 from mininet.link import TCLink
@@ -12,7 +13,9 @@ from util import decode
 
 from controller import POXBridge
 from hard_topo import MyTopo, MyMininet
+from parse_input import parse_matrix
 
+runD = True
 
 def monitorFiles( outfiles, seconds, timeoutms ):
     "Monitor set of files and return [(host, line)...]"
@@ -48,19 +51,21 @@ def monitorFiles( outfiles, seconds, timeoutms ):
     devnull.close()  # Not really necessary
 
 
-def runServ(hosts):
+def runServ(hosts, lock):
     cmd = "%s/hard_server/serv.py --log-level 'DEBUG'" % os.environ['HOME']
     outfiles, errfiles = {}, {}
     for host in hosts:
         # Create and/or erase output files
         outfiles[ host ] = '/tmp/%s.out' % host.name
         errfiles[ host ] = '/tmp/%s.err' % host.name
+        lock.acquire()
         host.cmd( 'echo >', outfiles[ host ] )
         host.cmd( 'echo >', errfiles[ host ] )
         host.cmdPrint(cmd,
                 '>', outfiles[ host],
                 '2>', errfiles[ host ],
                 '&')
+        lock.release()
     return outfiles, errfiles
 
 
@@ -70,16 +75,30 @@ def stopServ(hosts):
         h.cmd('kill %' + who)
 
 
-def runIperfs(net, hosts, seconds):
-    for i in range(len(hosts)):
-        h1 = hosts[i]
-        for j in range(i+1,len(hosts)):
-            h2 = hosts[j]
-            # Start iperfs
-            output("%s - %s iperf: %s\n" % (h1.name, h2.name, net.iperf( (h1, h2), seconds=seconds )))
+def runIperfs(flows, net, hosts, seconds, lock):
+    lock.acquire()
+    flag = runD
+    lock.release()
+    while flag:
+        for i in range(len(flows)):
+            h1 = hosts[i]
+            for j in range(len(flows[i])):
+                if flows[i][j][0] < i:
+                    continue
+                h2 = hosts[flows[i][j][0]]
+                # Start iperfs
+                lock.acquire()
+                perf = net.iperf( (h1, h2), seconds=seconds )
+                lock.release()
+                output("%s - %s iperf: %s\n" % (h1.name, h2.name, perf[0]))
+                flows[i][j] = (flows[i][j][0], perf[1])
+        lock.acquire()
+        flag = runD
+        lock.release()
 
 
-def iperfTest( seconds=5 ):
+def iperfTest( seconds=5, path='matrix.csv' ):
+    global runD
     topo = MyTopo()
     net = MyMininet( count=3, topo=topo,
                    host=CPULimitedHost, link=TCLink,
@@ -90,23 +109,30 @@ def iperfTest( seconds=5 ):
     pox.start()
     sleep(15)
     hosts = net.hosts
+    flows = parse_matrix(path)
+
     info( "Starting test...\n" )
     net.pingAll()
-    #runIperfs(net, hosts, seconds)
-    outfiles, errfiles = runServ(hosts)
+    lock = threading.Lock()
+    thread = threading.Thread(target=runIperfs, args=(flows, net, hosts, seconds, lock))
+    thread.start()
+
+    outfiles, errfiles = runServ(hosts, lock)
     info( "Monitoring output for", seconds * 10, "seconds\n" )
-    for h, line in monitorFiles( outfiles, seconds * 10, timeoutms=500 ):
+    for h, line in monitorFiles( errfiles, seconds * 10, timeoutms=500 ):
         if h:
             info( '%s: %s\n' % ( h.name, line ) )
+
+    lock.acquire()
     net.pingAll()
-    runIperfs(net, hosts, seconds)
-    #monsec = seconds * (seconds + 1) / 2
-    #info( "Monitoring output for", monsec, "seconds\n" )
-    #for h, line in monitorFiles( outfiles, seconds, timeoutms=500 ):
-    #    if h:
-    #        info( '%s: %s\n' % ( h.name, line ) )
-    pox.stop()
+    lock.release()
+
+    lock.acquire()
     stopServ(hosts)
+    runD = False
+    lock.release()
+    thread.join()
+    pox.stop()
     net.stop()
 
 
