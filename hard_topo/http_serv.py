@@ -77,7 +77,7 @@ def post_mes(dst, host_num, body):
 
 
 def spam(dst, tickrate, start, lifetime):
-    global host_num
+    global host_num, spamed
     time.sleep(start)
     start_time = time.time()
     while True:
@@ -91,7 +91,7 @@ def spam(dst, tickrate, start, lifetime):
 
 
 def poster():
-    global host_num
+    global host_num, posted
     while True:
         post = q.get()
         try:
@@ -123,7 +123,7 @@ def get_path_init(flows):
 
 
 def run(server_class=HTTPServer, handler_class=BaseHTTPRequestHandler, flows_path="flows"):
-    global host_num
+    global host_num, posted, spamed
     host_num = int(get_my_addr().split('.')[-1])
     logging.debug("%s", get_my_addr())
     paths, inits = get_path_init(parse_inits(flows_path))
