@@ -40,7 +40,6 @@ def parse_inits(path):
     paths = list()
     with open(path, "r") as f:
         for line in f:
-            print(line)
             pth, tick, start, lifetime = line.split('\t')
             paths.append((path_to_map(pth), float(tick), float(start), float(lifetime)))
     return paths

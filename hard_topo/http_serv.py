@@ -13,7 +13,7 @@ import sys
 import threading
 import time
 
-from parse_input import parse_inits
+from parse_input import parse_inits, path_to_map
 
 
 host_num = 0
@@ -122,11 +122,21 @@ def get_path_init(flows):
     return paths, inits
 
 
+def fill_custom_paths(paths, flow_table='flow_table'):
+    res = list()
+    with open(flow_table, "r") as f:
+        i = 0
+        for line in f:
+            res.append(path_to_map(line)[0])
+    return res
+
+
 def run(server_class=HTTPServer, handler_class=BaseHTTPRequestHandler, flows_path="flows"):
     global host_num, posted, spamed
     host_num = int(get_my_addr().split('.')[-1])
     logging.debug("%s", get_my_addr())
     paths, inits = get_path_init(parse_inits(flows_path))
+    paths = fill_custom_paths(paths)
     if host_num in inits:
         logging.info("INITIATOR")
         for init in inits[host_num]:

@@ -13,7 +13,8 @@ from util import decode
 
 from controller import POXBridge
 from hard_topo import MyTopo, MyMininet
-from parse_input import parse_matrix
+from parse_input import parse_matrix, parse_inits
+from custom_flow_table import create_table
 
 runD = True
 
@@ -84,6 +85,9 @@ def runIperfs(flows, net, hosts, seconds, lock):
             h1 = hosts[i]
             for j in range(len(flows[i])):
                 if flows[i][j][0] < i:
+                    for flow in flows[flows[i][j][0]]:
+                        if flow[0] == i:
+			    flows[i][j] = (flows[i][j][0], flow[1])
                     continue
                 h2 = hosts[flows[i][j][0]]
                 # Start iperfs
@@ -91,13 +95,26 @@ def runIperfs(flows, net, hosts, seconds, lock):
                 perf = net.iperf( (h1, h2), seconds=seconds )
                 lock.release()
                 output("%s - %s iperf: %s\n" % (h1.name, h2.name, perf[0]))
-                flows[i][j] = (flows[i][j][0], perf[1])
+                flows[i][j] = (flows[i][j][0], float(perf[1].split(' ')[0]))
+
         lock.acquire()
         flag = runD
         lock.release()
 
 
-def iperfTest( seconds=5, path='matrix.csv' ):
+def run_flow_table_manager(flows, passed_flows, lock):
+    lock.acquire()
+    flag = runD
+    lock.release()
+    while flag:
+        sleep(10)
+        create_table(flows, passed_flows)
+        lock.acquire()
+        flag = runD
+        lock.release()
+
+
+def iperfTest( seconds=5, matrix_path='matrix.csv', inits_path='flows' ):
     global runD
     topo = MyTopo()
     net = MyMininet( count=3, topo=topo,
@@ -109,13 +126,20 @@ def iperfTest( seconds=5, path='matrix.csv' ):
     pox.start()
     sleep(15)
     hosts = net.hosts
-    flows = parse_matrix(path)
+    flows = parse_matrix(matrix_path)
 
     info( "Starting test...\n" )
     net.pingAll()
     lock = threading.Lock()
-    thread = threading.Thread(target=runIperfs, args=(flows, net, hosts, seconds, lock))
-    thread.start()
+    #runIperfs(flows, net, hosts, seconds, lock)
+    #thread = threading.Thread(target=runIperfs, args=(flows, net, hosts, seconds, lock))
+    #thread.start()
+    #lock.acquire()
+    #runD = False
+    #lock.release()
+    passed_flows = parse_inits(inits_path)
+    flowTable = threading.Thread(target=run_flow_table_manager, args=(flows, passed_flows, lock))
+    flowTable.start()
 
     outfiles, errfiles = runServ(hosts, lock)
     info( "Monitoring output for", seconds * 10, "seconds\n" )
@@ -131,7 +155,8 @@ def iperfTest( seconds=5, path='matrix.csv' ):
     stopServ(hosts)
     runD = False
     lock.release()
-    thread.join()
+    flowTable.join()
+    #thread.join()
     pox.stop()
     net.stop()
 
