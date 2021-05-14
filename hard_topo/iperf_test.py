@@ -107,8 +107,8 @@ def run_flow_table_manager(flows, passed_flows, lock):
     flag = runD
     lock.release()
     while flag:
-        sleep(10)
         create_table(flows, passed_flows)
+        sleep(10)
         lock.acquire()
         flag = runD
         lock.release()
@@ -142,10 +142,11 @@ def iperfTest( seconds=5, matrix_path='matrix.csv', inits_path='flows' ):
     flowTable.start()
 
     outfiles, errfiles = runServ(hosts, lock)
-    info( "Monitoring output for", seconds * 10, "seconds\n" )
-    for h, line in monitorFiles( errfiles, seconds * 10, timeoutms=500 ):
-        if h:
-            info( '%s: %s\n' % ( h.name, line ) )
+    #info( "Monitoring output for", seconds * 10, "seconds\n" )
+    #for h, line in monitorFiles( errfiles, seconds * 10, timeoutms=500 ):
+    #    if h:
+    #        info( '%s: %s\n' % ( h.name, line ) )
+    sleep(30)
 
     lock.acquire()
     net.pingAll()
