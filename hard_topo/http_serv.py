@@ -47,7 +47,8 @@ class MyHandler(BaseHTTPRequestHandler):
         logging.info("in POST: %s", post_body)
         self.wfile.write("ok {}".format(post_body).encode('utf-8'))
 
-        path = self.headers["path"]
+        str_path = self.headers["path"]
+        path = path_to_map(str_path)[0]
         print(path)
         #random.shuffle(paths)
         #path = paths[flow_id]
@@ -59,9 +60,9 @@ class MyHandler(BaseHTTPRequestHandler):
                 break
 
         logging.debug("host_num=%d, dst=%d", host_num, dst)
-        if host_num==dst:
+        if host_num==dst or dst == 0:
             return
-        q.put({"body": post_body, "dst": dst, "path": flow_id})
+        q.put({"body": post_body, "dst": dst, "path": str_path})
 
 
 def post_mes(dst, host_num, body, path):
@@ -78,12 +79,39 @@ def post_mes(dst, host_num, body, path):
     conn.close()
 
 
+def map_to_path(path, src, dst):
+    str_path = ''
+    key = str(src) + "/" + str(dst)
+    start_key = key
+    str_path = key
+    while key in path:
+        src = dst
+        dst = path[key]
+        str_path += "/" + str(dst)
+        key = str(src) + "/" + str(dst)
+        if key == start_key:
+            break
+    return str_path
+
+
+def get_dst(path, src):
+    for key in path.keys():
+        f, s = key.split("/")
+        if int(f) == src:
+            return int(s)
+    return 0
+
+
 #TODO: why dst = 10? should be 1
-def spam(dst, tickrate, start, lifetime, path):
+def spam(dst, tickrate, start, lifetime, flow_id, paths):
     global host_num, spamed
     time.sleep(start)
     start_time = time.time()
+    if str(host_num) + '/' + str(dst) not in paths[flow_id]:
+        dst = get_dst(paths[flow_id], host_num)
+    path = map_to_path(paths[flow_id], host_num, dst)
     while True:
+        print(paths, flow_id)
         post_mes(dst, host_num, "test", path)
         spamed += 1
         cur_time = time.time()
@@ -102,7 +130,7 @@ def poster():
             q.task_done()
             posted += 1
         except:
-            logging.error("err: %s", sys.exc_info()[0])
+            logging.error("err: %s", sys.exc_info())
 
 
 def get_my_addr():
@@ -116,29 +144,36 @@ def get_my_addr():
 def get_path_init(flows):
     paths = list()
     inits = dict()
-    #i = 0
+    i = 0
     for flow in flows:
         path_with_start, tickrate, start, lifetime = flow[0], flow[1], flow[2], flow[3]
         paths.append(path_with_start[0])
         if path_with_start[1][0] not in inits:
             inits[path_with_start[1][0]] = list()
-        inits[path_with_start[1][0]].append((path_with_start[1][1], tickrate, start, lifetime, path_with_start[0]))
-        #i += 1
+        inits[path_with_start[1][0]].append((path_with_start[1][1], tickrate, start, lifetime, i))
+        i += 1
     return paths, inits
 
 
 def fill_custom_paths(paths, flow_table='flow_table'):
-    res = list()
-    with open(flow_table, "r") as f:
-        i = 0
-        for line in f:
-            new_path = path_to_map(line)[0]
-            map_path = paths[i]
-            for key, val in new_path.items():
-                map_path[key] = val
-            res.append(map_path)
-            i += 1
-    return res
+    while True:
+        time.sleep(15)
+        res = list()
+        with open(flow_table, "r") as f:
+            i = 0
+            for line in f:
+                new_path = path_to_map(line)[0]
+                logging.debug(new_path)
+                map_path = paths[i]
+                for key, val in new_path.items():
+                    map_path[key] = val
+                res.append(map_path)
+                i += 1
+        paths = res
+
+
+def unpack(init, paths):
+    return (init[0], init[1], init[2], init[3], init[4], paths)
 
 
 #TODO: here filling with custom paths happens once, but must happen all the time with intervals
@@ -148,11 +183,12 @@ def run(server_class=HTTPServer, handler_class=MyHandler, flows_path="flows"):
     logging.debug("%s", get_my_addr())
     paths, inits = get_path_init(parse_inits(flows_path))
     #TODO: move this part to thread?
-    paths = fill_custom_paths(paths)
+    threading.Thread(target=fill_custom_paths, daemon=True, args=(paths, )).start()
+    #paths = fill_custom_paths(paths)
     if host_num in inits:
         logging.info("INITIATOR")
         for init in inits[host_num]:
-            p = threading.Thread(target=spam, daemon=True, args=init)
+            p = threading.Thread(target=spam, daemon=True, args=unpack(init, paths))
             p.start()
     server_address = ('', 8000)
     httpd = server_class(server_address, handler_class)

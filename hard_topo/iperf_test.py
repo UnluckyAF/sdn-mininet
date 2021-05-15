@@ -97,6 +97,7 @@ def runIperfs(flows, net, hosts, seconds, lock):
                 output("%s - %s iperf: %s\n" % (h1.name, h2.name, perf[0]))
                 flows[i][j] = (flows[i][j][0], float(perf[1].split(' ')[0]))
 
+        sleep(10)
         lock.acquire()
         flag = runD
         lock.release()
@@ -132,8 +133,8 @@ def iperfTest( seconds=5, matrix_path='matrix.csv', inits_path='flows' ):
     net.pingAll()
     lock = threading.Lock()
     #runIperfs(flows, net, hosts, seconds, lock)
-    #thread = threading.Thread(target=runIperfs, args=(flows, net, hosts, seconds, lock))
-    #thread.start()
+    thread = threading.Thread(target=runIperfs, args=(flows, net, hosts, seconds, lock))
+    thread.start()
     #lock.acquire()
     #runD = False
     #lock.release()
@@ -146,7 +147,7 @@ def iperfTest( seconds=5, matrix_path='matrix.csv', inits_path='flows' ):
     #for h, line in monitorFiles( errfiles, seconds * 10, timeoutms=500 ):
     #    if h:
     #        info( '%s: %s\n' % ( h.name, line ) )
-    sleep(30)
+    sleep(60)
 
     lock.acquire()
     net.pingAll()
@@ -157,7 +158,7 @@ def iperfTest( seconds=5, matrix_path='matrix.csv', inits_path='flows' ):
     runD = False
     lock.release()
     flowTable.join()
-    #thread.join()
+    thread.join()
     pox.stop()
     net.stop()
 
