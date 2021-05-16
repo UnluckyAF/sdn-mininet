@@ -1,7 +1,9 @@
 def dijkstra(graph, s, f):
+    INF = 999999999
     path = dict()
-    d = [float(1001) for _ in range(len(graph))]
+    d = [float(INF) for _ in range(len(graph))]
     used = [False for _ in range(len(graph))]
+    print("GRAPH\n", graph)
     d[s] = 0
     path[s] = str(s + 1)
     for i in range(len(graph)):
@@ -9,7 +11,7 @@ def dijkstra(graph, s, f):
         for j in range(len(graph)):
             if not used[j] and (v is None or d[j] < d[v]):
                 v = j
-        if d[v] == 1001:
+        if d[v] == INF:
             break
         print("here", v)
         used[v] = True
@@ -17,6 +19,7 @@ def dijkstra(graph, s, f):
             if d[v] + edge[1] < d[edge[0]]:
                 path[edge[0]] = path[v] + '/' + str(edge[0] + 1)
                 d[edge[0]] = d[v] + edge[1]
+        print("DIJKSTRA", d)
     print("MAP\n", path)
     return path[f]
 
@@ -33,7 +36,7 @@ def reverse_weights(flows, max_weight=1000):
 
 
 def create_table(matrix, flows):
-    print("MATRIX\n", matrix, "\nFLOWS\n", flows)
+    #print("MATRIX\n", matrix, "\nFLOWS\n", flows)
     graph = reverse_weights(matrix)
     f = open("flow_table", "w")
     for flow in flows:

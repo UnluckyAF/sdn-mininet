@@ -102,23 +102,27 @@ def get_dst(path, src):
     return 0
 
 
-#TODO: why dst = 10? should be 1
 def spam(dst, tickrate, start, lifetime, flow_id, paths):
     global host_num, spamed
     time.sleep(start)
     start_time = time.time()
-    if str(host_num) + '/' + str(dst) not in paths[flow_id]:
+    print("DEBUG", dst, paths[flow_id], paths, flow_id)
+    if paths[flow_id] != {} and str(host_num) + '/' + str(dst) not in paths[flow_id]:
         dst = get_dst(paths[flow_id], host_num)
+    print("DEBUG", dst, paths[flow_id])
     path = map_to_path(paths[flow_id], host_num, dst)
     while True:
-        print(paths, flow_id)
-        post_mes(dst, host_num, "test", path)
-        spamed += 1
-        cur_time = time.time()
-        if cur_time - start_time >= lifetime:
-            logging.info("%d - %d: stopped" % (host_num, dst))
-            return
-        time.sleep(tickrate)
+        try:
+            print(paths, flow_id)
+            post_mes(dst, host_num, "test", path)
+            spamed += 1
+            cur_time = time.time()
+            if cur_time - start_time >= lifetime:
+                logging.info("%d - %d: stopped" % (host_num, dst))
+                return
+            time.sleep(tickrate)
+        except:
+            logging.error("err: %s", sys.exc_info())
 
 
 def poster():
@@ -169,7 +173,8 @@ def fill_custom_paths(paths, flow_table='flow_table'):
                     map_path[key] = val
                 res.append(map_path)
                 i += 1
-        paths = res
+        if len(res) > 0:
+            paths = res
 
 
 def unpack(init, paths):
@@ -177,13 +182,14 @@ def unpack(init, paths):
 
 
 #TODO: here filling with custom paths happens once, but must happen all the time with intervals
-def run(server_class=HTTPServer, handler_class=MyHandler, flows_path="flows"):
+def run(server_class=HTTPServer, handler_class=MyHandler, flows_path="flows", use_path_alg=False):
     global host_num, posted, spamed
     host_num = int(get_my_addr().split('.')[-1])
     logging.debug("%s", get_my_addr())
     paths, inits = get_path_init(parse_inits(flows_path))
     #TODO: move this part to thread?
-    threading.Thread(target=fill_custom_paths, daemon=True, args=(paths, )).start()
+    if use_path_alg:
+        threading.Thread(target=fill_custom_paths, daemon=True, args=(paths, )).start()
     #paths = fill_custom_paths(paths)
     if host_num in inits:
         logging.info("INITIATOR")
@@ -202,8 +208,9 @@ def run(server_class=HTTPServer, handler_class=MyHandler, flows_path="flows"):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='http server doing something.')
     parser.add_argument("--flows", default="flows", help="Flows with path and tickrate, file without extension.")
+    parser.add_argument("--use_path_alg", default=False, action='store_true', help="Use path algorithm (dijkstra).")
     parser.add_argument("--log-level", default=logging.INFO, type=lambda x: getattr(logging, x), help="Configure the logging level.")
     args = parser.parse_args()
     logging.basicConfig(level=args.log_level)
 
-    run(flows_path=args.flows)
+    run(flows_path=args.flows, use_path_alg=args.use_path_alg)
