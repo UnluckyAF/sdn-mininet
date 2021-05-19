@@ -19,5 +19,6 @@ class POXBridge( RemoteController ):
         "Stop POX"
         self.cmd( 'kill %' + self.pox )
 
+
 controllers = { 'poxbridge': POXBridge }
 

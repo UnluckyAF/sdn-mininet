@@ -163,7 +163,7 @@ def iperfTest( seconds=5, matrix_path='matrix.csv', inits_path='flows' ):
     #for h, line in monitorFiles( errfiles, seconds * 10, timeoutms=500 ):
     #    if h:
     #        info( '%s: %s\n' % ( h.name, line ) )
-    sleep(150)
+    sleep(300)
     lock.acquire()
     #net.pingAllFull()
     net.pingAll()
@@ -186,7 +186,7 @@ def iperfTest( seconds=5, matrix_path='matrix.csv', inits_path='flows' ):
     thread = threading.Thread(target=runIperfs, args=(flows, net, hosts, seconds, lock, metrics))
     thread.start()
     outfiles, errfiles = runServ(hosts, lock, False)
-    sleep(50)
+    sleep(300)
     lock.acquire()
     #net.pingAllFull()
     net.pingAll()
@@ -197,6 +197,10 @@ def iperfTest( seconds=5, matrix_path='matrix.csv', inits_path='flows' ):
     runD = False
     lock.release()
     thread.join()
+
+    write_metrics(metrics, name="metrics2")
+    metrics = list()
+
     pox.stop()
     net.stop()
 
