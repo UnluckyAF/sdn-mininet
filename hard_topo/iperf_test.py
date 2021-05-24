@@ -8,10 +8,11 @@ import threading
 
 from mininet.node import CPULimitedHost, RemoteController
 from mininet.link import TCLink
+from mininet.cli import CLI
 from mininet.log import info, setLogLevel, output
 from util import decode
 
-from controller import POXBridge
+from controller import POXBridge, POXBridgeMulti
 from hard_topo import MyTopo, MyMininet
 from parse_input import parse_matrix, parse_inits
 from custom_flow_table import create_table
@@ -93,6 +94,8 @@ def runIperfs(flows, net, hosts, seconds, lock, metrics):
                     for flow in flows[flows[i][j][0]]:
                         if flow[0] == i:
 			    flows[i][j] = (flows[i][j][0], flow[1])
+                            if len(metrics[i]) < j + 1:
+                                metrics[i].append((flows[i][j][0], 0))
                     continue
                 h2 = hosts[flows[i][j][0]]
                 # Start iperfs
@@ -130,7 +133,16 @@ def write_metrics(metrics, name="metrics"):
     with open(name, "w") as f:
         for i in range(len(metrics)):
             for pair in metrics[i]:
-                f.write("%s - %s %s" % (i, pair[0], pair[1]))
+                if pair[0] > i:
+                    f.write("%s - %s %s" % (i, pair[0], pair[1]))
+
+
+def dump_flows(host, lock, n):
+    lock.acquire()
+    sleep(10)
+    for i in range(n):
+        host.cmd("ovs-ofctl dump-flows s%d > s%d.out" % (i+1, i+1))
+    lock.release()
 
 
 def iperfTest( seconds=5, matrix_path='matrix.csv', inits_path='flows' ):
@@ -141,7 +153,7 @@ def iperfTest( seconds=5, matrix_path='matrix.csv', inits_path='flows' ):
                    controller=partial( RemoteController, ip='127.0.0.1', port=6633 ),
                    autoSetMacs=True, waitConnected=False)
     net.start()
-    pox = POXBridge('c0', ip='127.0.0.1', port=6613)
+    pox = POXBridgeMulti('c0', ip='127.0.0.1', port=6613)
     pox.start()
     sleep(15)
     hosts = net.hosts
@@ -149,7 +161,7 @@ def iperfTest( seconds=5, matrix_path='matrix.csv', inits_path='flows' ):
 
     info( "Starting test...\n" )
     #net.pingAllFull()
-    net.pingAll()
+    #net.pingAll()
     lock = threading.Lock()
     metrics = list()
     thread = threading.Thread(target=runIperfs, args=(flows, net, hosts, seconds, lock, metrics))
@@ -163,11 +175,18 @@ def iperfTest( seconds=5, matrix_path='matrix.csv', inits_path='flows' ):
     #for h, line in monitorFiles( errfiles, seconds * 10, timeoutms=500 ):
     #    if h:
     #        info( '%s: %s\n' % ( h.name, line ) )
-    sleep(300)
+    sleep(100)
     lock.acquire()
-    #net.pingAllFull()
-    net.pingAll()
+    output("ping 10")
+    hosts[4].cmd("ping -c 5 10.0.0.10 > ping")
     lock.release()
+    #dump_flows(hosts[0], lock, len(hosts))
+    sleep(10)
+    #lock.acquire()
+    #net.pingAllFull()
+    #net.pingAll()
+    #lock.release()
+    #CLI(net)
 
     lock.acquire()
     stopServ(hosts)
@@ -178,30 +197,36 @@ def iperfTest( seconds=5, matrix_path='matrix.csv', inits_path='flows' ):
 
     write_metrics(metrics)
     metrics = list()
-
-    info( "Stop dijkstra, start spanning tree\n" )
-
-    os.remove("flow_table")
-    runD = True
-    thread = threading.Thread(target=runIperfs, args=(flows, net, hosts, seconds, lock, metrics))
-    thread.start()
-    outfiles, errfiles = runServ(hosts, lock, False)
-    sleep(300)
-    lock.acquire()
-    #net.pingAllFull()
-    net.pingAll()
-    lock.release()
-
-    lock.acquire()
-    stopServ(hosts)
-    runD = False
-    lock.release()
-    thread.join()
-
-    write_metrics(metrics, name="metrics2")
-    metrics = list()
-
     pox.stop()
+    #info( "Stop dijkstra, start spanning tree\n" )
+
+    #pox = POXBridge('c0', ip='127.0.0.1', port=6613)
+    #pox.start()
+    #sleep(15)
+
+
+    #os.remove("flow_table")
+    #runD = True
+    #thread = threading.Thread(target=runIperfs, args=(flows, net, hosts, seconds, lock, metrics))
+    #thread.start()
+    #outfiles, errfiles = runServ(hosts, lock, False)
+    #sleep(300)
+    ##lock.acquire()
+    ##net.pingAllFull()
+    ##net.pingAll()
+    ##lock.release()
+    ##CLI(net)
+
+    #lock.acquire()
+    #stopServ(hosts)
+    #runD = False
+    #lock.release()
+    #thread.join()
+
+    #write_metrics(metrics, name="metrics2")
+    #metrics = list()
+
+    #pox.stop()
     net.stop()
 
 

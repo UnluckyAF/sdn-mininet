@@ -19,6 +19,24 @@ class POXBridge( RemoteController ):
         "Stop POX"
         self.cmd( 'kill %' + self.pox )
 
+class POXBridgeMulti( RemoteController ):
+    def start( self ):
+        self.cmd("export PYTHONPATH=$PYTHONPATH:~/hard_server;")
+        self.pox = '%s/pox/pox.py' % os.environ[ 'HOME' ]
+        self.cmd(
+                self.pox,
+                '--verbose openflow.spanning_tree',
+                '--no-flood --hold-down',
+                'log.level --DEBUG samples.pretty_log',
+                'openflow.discovery path info.packet_dump',
+                '>', "/tmp/c0Multiout",
+                '2>', "/tmp/c0Multierr",
+                '&'
+                )
+    def stop( self ):
+        "Stop POX"
+        self.cmd( 'kill %' + self.pox )
 
-controllers = { 'poxbridge': POXBridge }
+
+controllers = { 'poxbridge': POXBridge, 'poxbriedgemulti': POXBridgeMulti}
 

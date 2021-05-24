@@ -27,7 +27,7 @@ class MyTopo( Topo ):
         for i in range(len(links)):
             node = links[i]
             for link in node:
-                self.addLink(switches[i], switches[link[0]], bw=link[1])
+		self.addLink(switches[i], switches[link[0]], bw=link[1])
         
 
 topos = { 'mytopo': MyTopo }
