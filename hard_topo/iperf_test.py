@@ -9,7 +9,7 @@ import threading
 from mininet.node import CPULimitedHost, RemoteController
 from mininet.link import TCLink
 from mininet.cli import CLI
-from mininet.log import info, setLogLevel, output
+from mininet.log import info, setLogLevel, output, error
 from util import decode
 
 from controller import POXBridge, POXBridgeMulti
@@ -100,14 +100,21 @@ def runIperfs(flows, net, hosts, seconds, lock, metrics):
                 h2 = hosts[flows[i][j][0]]
                 # Start iperfs
                 lock.acquire()
-                perf = net.iperf( (h1, h2), seconds=seconds )
+                err = False
+                try:
+                    perf = net.iperf( (h1, h2), seconds=seconds, fmt='m' )
+                except:
+                    output("error in iperf %s %s: %s" % (h1.name, h2.name, sys.exc_info()))
+                    err = True
                 lock.release()
-                output("%s - %s iperf: %s\n" % (h1.name, h2.name, perf[0]))
-                flows[i][j] = (flows[i][j][0], float(perf[1].split(' ')[0]))
+                if err:
+                    continue
+                output("%s - %s iperf: %s\n" % (h1.name, h2.name, perf))
+                flows[i][j] = (flows[i][j][0], float(perf[0].split(' ')[0]))
                 if len(metrics[i]) < j + 1:
-                    metrics[i].append((flows[i][j][0], [float(perf[1].split(' ')[0])]))
+                    metrics[i].append((flows[i][j][0], [float(perf[0].split(' ')[0])]))
                 else:
-                    metrics[i][j][1].append(float(perf[1].split(' ')[0]))
+                    metrics[i][j][1].append(float(perf[0].split(' ')[0]))
                 lock.acquire()
                 flag = runD
                 lock.release()
@@ -178,10 +185,14 @@ def iperfTest( seconds=5, matrix_path='matrix.csv', inits_path='flows' ):
     sleep(100)
     lock.acquire()
     output("ping 10")
-    hosts[4].cmd("ping -c 5 10.0.0.10 > ping")
+    hosts[3].cmd("ping -c 5 10.0.0.10 > ping")
     lock.release()
     #dump_flows(hosts[0], lock, len(hosts))
-    sleep(10)
+    sleep(100)
+    lock.acquire()
+    output("ping 10")
+    hosts[4].cmd("ping -c 5 10.0.0.10 > ping2")
+    lock.release()
     #lock.acquire()
     #net.pingAllFull()
     #net.pingAll()

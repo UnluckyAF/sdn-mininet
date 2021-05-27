@@ -44,12 +44,12 @@ class MyHandler(BaseHTTPRequestHandler):
         self.end_headers()
         content_len = int(self.headers.get('Content-Length'))
         post_body = self.rfile.read(content_len)
-        logging.info("in POST: %s", post_body)
+        #logging.info("in POST: %s", post_body)
         self.wfile.write("ok {}".format(post_body).encode('utf-8'))
 
         str_path = self.headers["path"]
         path = path_to_map(str_path)[0]
-        print(path)
+        #print(path)
         #random.shuffle(paths)
         #path = paths[flow_id]
         dst = 0
@@ -68,7 +68,7 @@ class MyHandler(BaseHTTPRequestHandler):
 def post_mes(dst, host_num, body, path):
     logging.debug("about to start connection 10.0.0.{}".format(dst))
     conn = HTTPConnection("10.0.0.{}".format(dst), 8000)
-    conn.set_debuglevel(1)
+    #conn.set_debuglevel(1)
     logging.debug("posting to 10.0.0.{}".format(dst))
     logging.debug("host_num=%d, dst=%d", host_num, dst)
     logging.debug(path)
@@ -106,15 +106,15 @@ def spam(dst, tickrate, start, lifetime, flow_id, paths):
     global host_num, spamed
     time.sleep(start)
     start_time = time.time()
-    print("DEBUG", dst, paths[flow_id], paths, flow_id)
+    #print("DEBUG", dst, paths[flow_id], paths, flow_id)
     if paths[flow_id] != {} and str(host_num) + '/' + str(dst) not in paths[flow_id]:
         dst = get_dst(paths[flow_id], host_num)
-    print("DEBUG", dst, paths[flow_id])
+    #print("DEBUG", dst, paths[flow_id])
     path = map_to_path(paths[flow_id], host_num, dst)
     while True:
         try:
-            print(paths, flow_id)
-            post_mes(dst, host_num, "test", path)
+            #print(paths, flow_id)
+            post_mes(dst, host_num, "test"*1024*1024, path)
             spamed += 1
             cur_time = time.time()
             if cur_time - start_time >= lifetime:

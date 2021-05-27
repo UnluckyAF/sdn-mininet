@@ -86,83 +86,83 @@ class MyMininet(Mininet):
                     (rttmin, rttavg, rttmax, rttdev) )
         return all_outputs
 
-    @staticmethod
-    def _parseIperf( iperfOutput ):
-        """Parse iperf output and return bandwidth.
-           iperfOutput: string
-           returns: result string"""
-        r = r'([\d\.]+ \w+/sec)'
-        m = re.findall( r, iperfOutput )
-        if m:
-            tmp = map(lambda x: x.split(' ')[0], m)
-            tmp2 = list()
-            for elem in tmp:
-                if float(elem) != 0:
-                    tmp2.append(elem)
-            mmin = min(map(float, tmp2))
-            mmax = max(map(float, tmp2))
-            avg = sum(map(float, tmp2)) / len(tmp2)
-            med = median(map(float, tmp2))
-            return ([mmin, avg, mmax, med], m[-1])
-        else:
-            # was: raise Exception(...)
-            error( 'could not parse iperf output: ' + iperfOutput )
-            return []
+    #@staticmethod
+    #def _parseIperf( iperfOutput ):
+    #    """Parse iperf output and return bandwidth.
+    #       iperfOutput: string
+    #       returns: result string"""
+    #    r = r'([\d\.]+ \w+/sec)'
+    #    m = re.findall( r, iperfOutput )
+    #    if m:
+    #        tmp = map(lambda x: x.split(' ')[0], m)
+    #        tmp2 = list()
+    #        for elem in tmp:
+    #            if float(elem) != 0:
+    #                tmp2.append(elem)
+    #        mmin = min(map(float, tmp2))
+    #        mmax = max(map(float, tmp2))
+    #        avg = sum(map(float, tmp2)) / len(tmp2)
+    #        med = median(map(float, tmp2))
+    #        return ([mmin, avg, mmax, med], m[-1])
+    #    else:
+    #        # was: raise Exception(...)
+    #        error( 'could not parse iperf output: ' + iperfOutput )
+    #        return []
 
-    # XXX This should be cleaned up
+    ## XXX This should be cleaned up
 
-    def iperf( self, hosts=None, l4Type='TCP', udpBw='10M', fmt=None,
-               seconds=5, port=5001):
-        """Run iperf between two hosts.
-           hosts: list of hosts; if None, uses first and last hosts
-           l4Type: string, one of [ TCP, UDP ]
-           udpBw: bandwidth target for UDP test
-           fmt: iperf format argument if any
-           seconds: iperf time to transmit
-           port: iperf port
-           returns: two-element array of [ server, client ] speeds
-           note: send() is buffered, so client rate can be much higher than
-           the actual transmission rate; on an unloaded system, server
-           rate should be much closer to the actual receive rate"""
-        hosts = hosts or [ self.hosts[ 0 ], self.hosts[ -1 ] ]
-        assert len( hosts ) == 2
-        client, server = hosts
-        output( '*** Iperf: testing', l4Type, 'bandwidth between',
-                client, 'and', server, '\n' )
-        server.cmd( 'killall -9 iperf' )
-        iperfArgs = 'iperf -p %d ' % port
-        bwArgs = ''
-        if l4Type == 'UDP':
-            iperfArgs += '-u '
-            bwArgs = '-b ' + udpBw + ' '
-        elif l4Type != 'TCP':
-            raise Exception( 'Unexpected l4 type: %s' % l4Type )
-        if fmt:
-            iperfArgs += '-f %s ' % fmt
-        server.sendCmd( iperfArgs + '-s' )
-        if l4Type == 'TCP':
-            if not waitListening( client, server.IP(), port ):
-                raise Exception( 'Could not connect to iperf on port %d'
-                                 % port )
-        cliout = client.cmd( iperfArgs + '-t %d -c ' % seconds +
-                             server.IP() + ' ' + bwArgs )
-        debug( 'Client output: %s\n' % cliout )
-        servout = ''
-        # We want the last *b/sec from the iperf server output
-        # for TCP, there are two fo them because of waitListening
-        count = 2 if l4Type == 'TCP' else 1
-        while len( re.findall( '/sec', servout ) ) < count:
-            servout += server.monitor( timeoutms=5000 )
-        server.sendInt()
-        servout += server.waitOutput()
-        debug( 'Server output: %s\n' % servout )
-        parsed_serv = self._parseIperf( servout )
-        parsed_client = self._parseIperf( cliout )
-        result = [parsed_serv[0], parsed_client[0]]
-        if l4Type == 'UDP':
-            result.insert( 0, udpBw )
-        output( '*** Results (min, avg, max, median): %s\n' % result )
-        return (result, parsed_serv[1])
+    #def iperf( self, hosts=None, l4Type='TCP', udpBw='10M', fmt=None,
+    #           seconds=5, port=5001):
+    #    """Run iperf between two hosts.
+    #       hosts: list of hosts; if None, uses first and last hosts
+    #       l4Type: string, one of [ TCP, UDP ]
+    #       udpBw: bandwidth target for UDP test
+    #       fmt: iperf format argument if any
+    #       seconds: iperf time to transmit
+    #       port: iperf port
+    #       returns: two-element array of [ server, client ] speeds
+    #       note: send() is buffered, so client rate can be much higher than
+    #       the actual transmission rate; on an unloaded system, server
+    #       rate should be much closer to the actual receive rate"""
+    #    hosts = hosts or [ self.hosts[ 0 ], self.hosts[ -1 ] ]
+    #    assert len( hosts ) == 2
+    #    client, server = hosts
+    #    output( '*** Iperf: testing', l4Type, 'bandwidth between',
+    #            client, 'and', server, '\n' )
+    #    server.cmd( 'killall -9 iperf' )
+    #    iperfArgs = 'iperf -p %d ' % port
+    #    bwArgs = ''
+    #    if l4Type == 'UDP':
+    #        iperfArgs += '-u '
+    #        bwArgs = '-b ' + udpBw + ' '
+    #    elif l4Type != 'TCP':
+    #        raise Exception( 'Unexpected l4 type: %s' % l4Type )
+    #    if fmt:
+    #        iperfArgs += '-f %s ' % fmt
+    #    server.sendCmd( iperfArgs + '-s' )
+    #    if l4Type == 'TCP':
+    #        if not waitListening( client, server.IP(), port ):
+    #            raise Exception( 'Could not connect to iperf on port %d'
+    #                             % port )
+    #    cliout = client.cmd( iperfArgs + '-t %d -c ' % seconds +
+    #                         server.IP() + ' ' + bwArgs )
+    #    debug( 'Client output: %s\n' % cliout )
+    #    servout = ''
+    #    # We want the last *b/sec from the iperf server output
+    #    # for TCP, there are two fo them because of waitListening
+    #    count = 2 if l4Type == 'TCP' else 1
+    #    while len( re.findall( '/sec', servout ) ) < count:
+    #        servout += server.monitor( timeoutms=5000 )
+    #    server.sendInt()
+    #    servout += server.waitOutput()
+    #    debug( 'Server output: %s\n' % servout )
+    #    parsed_serv = self._parseIperf( servout )
+    #    parsed_client = self._parseIperf( cliout )
+    #    result = [parsed_serv[0], parsed_client[0]]
+    #    if l4Type == 'UDP':
+    #        result.insert( 0, udpBw )
+    #    output( '*** Results (min, avg, max, median): %s\n' % result )
+    #    return (result, parsed_serv[1])
 
 
 if __name__ == '__main__':
