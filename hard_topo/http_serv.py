@@ -120,9 +120,9 @@ def spam(dst, tickrate, start, lifetime, flow_id, paths):
             if cur_time - start_time >= lifetime:
                 logging.info("%d - %d: stopped" % (host_num, dst))
                 return
-            time.sleep(tickrate)
         except:
             logging.error("err: %s", sys.exc_info())
+        time.sleep(tickrate)
 
 
 def poster():
@@ -135,6 +135,7 @@ def poster():
             posted += 1
         except:
             logging.error("err: %s", sys.exc_info())
+            q.task_done()
 
 
 def get_my_addr():
@@ -181,7 +182,6 @@ def unpack(init, paths):
     return (init[0], init[1], init[2], init[3], init[4], paths)
 
 
-#TODO: here filling with custom paths happens once, but must happen all the time with intervals
 def run(server_class=HTTPServer, handler_class=MyHandler, flows_path="flows", use_path_alg=False):
     global host_num, posted, spamed
     host_num = int(get_my_addr().split('.')[-1])

@@ -33,6 +33,7 @@ FLOW_HARD_TIMEOUT = 30
 
 # How long is allowable to set up a path?
 PATH_SETUP_TIME = 4
+faulty_switch = 0
 
 
 def _calc_paths ():
@@ -77,6 +78,8 @@ def _get_path (src, dst, first_port, final_port):
   """
   Gets a cooked path -- a list of (node,in_port,out_port)
   """
+  if src.dpid == faulty_switch:
+      return None
   # Start with a raw path...
   if src == dst:
     path = [src]
@@ -442,7 +445,12 @@ class l2_multi (EventMixin):
     wp.notify(event)
 
 
-def launch ():
+def launch (with_faulty_switch=0):
+  global faulty_switch
+  if with_faulty_switch == 0:
+      faulty_switch = 0
+  else:
+      faulty_switch=int(with_faulty_switch)
   core.registerNew(l2_multi)
 
   timeout = min(max(PATH_SETUP_TIME, 5) * 2, 15)

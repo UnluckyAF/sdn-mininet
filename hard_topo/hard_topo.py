@@ -17,7 +17,7 @@ class MyTopo( Topo ):
     def build( self ):
         "Create custom topo."
         switches = list()
-        links = parse_matrix("matrix.csv")
+        links = parse_matrix("matrix2.csv")
         for i in range(len(links)):
             h = self.addHost( 'h%s' % str(i+1) )
             s = self.addSwitch( 's%s' % str(i+1) )

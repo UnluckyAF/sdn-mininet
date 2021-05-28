@@ -7,7 +7,7 @@ def parse_row(row, num):
     links = list()
     for i in range(len(row)):
         if int(row[i]) > 0:
-            links.append((i, int(row[i])))
+            links.append((i, float(row[i])))
 
     return links
 

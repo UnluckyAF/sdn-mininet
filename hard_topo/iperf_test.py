@@ -12,7 +12,7 @@ from mininet.cli import CLI
 from mininet.log import info, setLogLevel, output, error
 from util import decode
 
-from controller import POXBridge, POXBridgeMulti
+from controller import POXBridge, POXBridgeMulti, initPox
 from hard_topo import MyTopo, MyMininet
 from parse_input import parse_matrix, parse_inits
 from custom_flow_table import create_table
@@ -80,7 +80,7 @@ def stopServ(hosts):
         output("killed %s %s" % (time(), o))
 
 
-def runIperfs(flows, net, hosts, seconds, lock, metrics):
+def runIperfs(flows, net, hosts, seconds, lock, metrics, dead_sw):
     lock.acquire()
     flag = runD
     lock.release()
@@ -99,16 +99,29 @@ def runIperfs(flows, net, hosts, seconds, lock, metrics):
                     continue
                 h2 = hosts[flows[i][j][0]]
                 # Start iperfs
-                lock.acquire()
                 err = False
-                try:
-                    perf = net.iperf( (h1, h2), seconds=seconds, fmt='m' )
-                except:
-                    output("error in iperf %s %s: %s" % (h1.name, h2.name, sys.exc_info()))
+                perf = ['1000 1000']
+                if h1.name != "h%d" % dead_sw:
+                    lock.acquire()
+                    try:
+                        perf = net.iperf( (h1, h2), seconds=seconds, fmt='m' )
+                    except:
+                        output("error in iperf %s %s: %s" % (h1.name, h2.name, sys.exc_info()))
+                        err = True
+                    lock.release()
+                    if err:
+                        continue
+                else:
+                    lock.acquire()
+                    try:
+                        perf = net.iperf( (h2, h1), seconds=seconds, fmt='m' )
+                    except:
+                        output("error in iperf %s %s: %s" % (h1.name, h2.name, sys.exc_info()))
+                        err = True
+                    lock.release()
+                    if err:
+                        continue
                     err = True
-                lock.release()
-                if err:
-                    continue
                 output("%s - %s iperf: %s\n" % (h1.name, h2.name, perf))
                 flows[i][j] = (flows[i][j][0], float(perf[0].split(' ')[0]))
                 if len(metrics[i]) < j + 1:
@@ -152,7 +165,7 @@ def dump_flows(host, lock, n):
     lock.release()
 
 
-def iperfTest( seconds=5, matrix_path='matrix.csv', inits_path='flows' ):
+def iperfTest( seconds=5, matrix_path='matrix.csv', inits_path='flows', sw=0 ):
     global runD
     topo = MyTopo()
     net = MyMininet( count=3, topo=topo,
@@ -160,7 +173,8 @@ def iperfTest( seconds=5, matrix_path='matrix.csv', inits_path='flows' ):
                    controller=partial( RemoteController, ip='127.0.0.1', port=6633 ),
                    autoSetMacs=True, waitConnected=False)
     net.start()
-    pox = POXBridgeMulti('c0', ip='127.0.0.1', port=6613)
+    #pox = POXBridgeMulti('c0', ip='127.0.0.1', port=6613)
+    pox = initPox(1)('c0', ip='127.0.0.1', port=6613)
     pox.start()
     sleep(15)
     hosts = net.hosts
@@ -171,8 +185,6 @@ def iperfTest( seconds=5, matrix_path='matrix.csv', inits_path='flows' ):
     #net.pingAll()
     lock = threading.Lock()
     metrics = list()
-    thread = threading.Thread(target=runIperfs, args=(flows, net, hosts, seconds, lock, metrics))
-    thread.start()
     passed_flows = parse_inits(inits_path)
     flowTable = threading.Thread(target=run_flow_table_manager, args=(flows, passed_flows, lock))
     flowTable.start()
@@ -182,17 +194,20 @@ def iperfTest( seconds=5, matrix_path='matrix.csv', inits_path='flows' ):
     #for h, line in monitorFiles( errfiles, seconds * 10, timeoutms=500 ):
     #    if h:
     #        info( '%s: %s\n' % ( h.name, line ) )
+    sleep(5)
+    thread = threading.Thread(target=runIperfs, args=(flows, net, hosts, seconds, lock, metrics, 1))
+    thread.start()
     sleep(100)
-    lock.acquire()
-    output("ping 10")
-    hosts[3].cmd("ping -c 5 10.0.0.10 > ping")
-    lock.release()
+    #lock.acquire()
+    #output("ping 10")
+    #hosts[3].cmd("ping -c 5 10.0.0.10 > ping")
+    #lock.release()
     #dump_flows(hosts[0], lock, len(hosts))
     sleep(100)
-    lock.acquire()
-    output("ping 10")
-    hosts[4].cmd("ping -c 5 10.0.0.10 > ping2")
-    lock.release()
+    #lock.acquire()
+    #output("ping 10")
+    #hosts[4].cmd("ping -c 5 10.0.0.10 > ping2")
+    #lock.release()
     #lock.acquire()
     #net.pingAllFull()
     #net.pingAll()
@@ -243,4 +258,4 @@ def iperfTest( seconds=5, matrix_path='matrix.csv', inits_path='flows' ):
 
 if __name__ == '__main__':
     setLogLevel('info')
-    iperfTest()
+    iperfTest(matrix_path="matrix2.csv", sw=1)
