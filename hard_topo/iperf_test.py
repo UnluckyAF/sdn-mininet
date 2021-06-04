@@ -80,7 +80,7 @@ def stopServ(hosts):
         output("killed %s %s" % (time(), o))
 
 
-def runIperfs(flows, net, hosts, seconds, lock, metrics, dead_sw):
+def runIperfs(flows, net, hosts, seconds, lock, metrics, dead_sw, cv):
     lock.acquire()
     flag = runD
     lock.release()
@@ -112,15 +112,6 @@ def runIperfs(flows, net, hosts, seconds, lock, metrics, dead_sw):
                     if err:
                         continue
                 else:
-                    lock.acquire()
-                    try:
-                        perf = net.iperf( (h2, h1), seconds=seconds, fmt='m' )
-                    except:
-                        output("error in iperf %s %s: %s" % (h1.name, h2.name, sys.exc_info()))
-                        err = True
-                    lock.release()
-                    if err:
-                        continue
                     err = True
                 output("%s - %s iperf: %s\n" % (h1.name, h2.name, perf))
                 flows[i][j] = (flows[i][j][0], float(perf[0].split(' ')[0]))
@@ -134,19 +125,21 @@ def runIperfs(flows, net, hosts, seconds, lock, metrics, dead_sw):
                 if not flag:
                     return
 
-        sleep(5)
+        cv.acquire()
+        cv.wait(5)
+        cv.release()
 
 
-def run_flow_table_manager(flows, passed_flows, lock):
+def run_flow_table_manager(flows, passed_flows, lock, cv):
     lock.acquire()
     flag = runD
     lock.release()
     while flag:
         create_table(flows, passed_flows)
-        sleep(10)
-        lock.acquire()
+        cv.acquire()
+        cv.wait(10)
         flag = runD
-        lock.release()
+        cv.release()
 
 
 def write_metrics(metrics, name="metrics"):
@@ -173,8 +166,8 @@ def iperfTest( seconds=5, matrix_path='matrix.csv', inits_path='flows', sw=0 ):
                    controller=partial( RemoteController, ip='127.0.0.1', port=6633 ),
                    autoSetMacs=True, waitConnected=False)
     net.start()
-    #pox = POXBridgeMulti('c0', ip='127.0.0.1', port=6613)
-    pox = initPox(1)('c0', ip='127.0.0.1', port=6613)
+    pox = POXBridgeMulti('c0', ip='127.0.0.1', port=6613)
+    #pox = initPox(sw)('c0', ip='127.0.0.1', port=6613)
     pox.start()
     sleep(15)
     hosts = net.hosts
@@ -184,9 +177,10 @@ def iperfTest( seconds=5, matrix_path='matrix.csv', inits_path='flows', sw=0 ):
     #net.pingAllFull()
     #net.pingAll()
     lock = threading.Lock()
+    cv = threading.Condition(lock)
     metrics = list()
     passed_flows = parse_inits(inits_path)
-    flowTable = threading.Thread(target=run_flow_table_manager, args=(flows, passed_flows, lock))
+    flowTable = threading.Thread(target=run_flow_table_manager, args=(flows, passed_flows, lock, cv))
     flowTable.start()
 
     outfiles, errfiles = runServ(hosts, lock, True)
@@ -195,15 +189,15 @@ def iperfTest( seconds=5, matrix_path='matrix.csv', inits_path='flows', sw=0 ):
     #    if h:
     #        info( '%s: %s\n' % ( h.name, line ) )
     sleep(5)
-    thread = threading.Thread(target=runIperfs, args=(flows, net, hosts, seconds, lock, metrics, 1))
+    thread = threading.Thread(target=runIperfs, args=(flows, net, hosts, seconds, lock, metrics, sw, cv))
     thread.start()
-    sleep(100)
+    sleep(300)
     #lock.acquire()
     #output("ping 10")
     #hosts[3].cmd("ping -c 5 10.0.0.10 > ping")
     #lock.release()
     #dump_flows(hosts[0], lock, len(hosts))
-    sleep(100)
+    #sleep(100)
     #lock.acquire()
     #output("ping 10")
     #hosts[4].cmd("ping -c 5 10.0.0.10 > ping2")
@@ -224,38 +218,39 @@ def iperfTest( seconds=5, matrix_path='matrix.csv', inits_path='flows', sw=0 ):
     write_metrics(metrics)
     metrics = list()
     pox.stop()
-    #info( "Stop dijkstra, start spanning tree\n" )
+    info( "Stop dijkstra, start spanning tree\n" )
 
-    #pox = POXBridge('c0', ip='127.0.0.1', port=6613)
-    #pox.start()
-    #sleep(15)
+    pox = POXBridge('c0', ip='127.0.0.1', port=6613)
+    pox.start()
+    sleep(15)
 
 
     #os.remove("flow_table")
-    #runD = True
-    #thread = threading.Thread(target=runIperfs, args=(flows, net, hosts, seconds, lock, metrics))
-    #thread.start()
-    #outfiles, errfiles = runServ(hosts, lock, False)
-    #sleep(300)
-    ##lock.acquire()
-    ##net.pingAllFull()
-    ##net.pingAll()
-    ##lock.release()
-    ##CLI(net)
+    runD = True
+    outfiles, errfiles = runServ(hosts, lock, False)
+    sleep(5)
+    thread = threading.Thread(target=runIperfs, args=(flows, net, hosts, seconds, lock, metrics, sw, cv))
+    thread.start()
+    sleep(300)
+    ###lock.acquire()
+    ###net.pingAllFull()
+    ###net.pingAll()
+    ###lock.release()
+    ###CLI(net)
 
-    #lock.acquire()
-    #stopServ(hosts)
-    #runD = False
-    #lock.release()
-    #thread.join()
+    lock.acquire()
+    stopServ(hosts)
+    runD = False
+    lock.release()
+    thread.join()
 
-    #write_metrics(metrics, name="metrics2")
-    #metrics = list()
+    write_metrics(metrics, name="metrics2")
+    metrics = list()
 
-    #pox.stop()
+    pox.stop()
     net.stop()
 
 
 if __name__ == '__main__':
     setLogLevel('info')
-    iperfTest(matrix_path="matrix2.csv", sw=1)
+    iperfTest()

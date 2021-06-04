@@ -102,9 +102,11 @@ def get_dst(path, src):
     return 0
 
 
-def spam(dst, tickrate, start, lifetime, flow_id, paths):
+def spam(dst, tickrate, start, lifetime, flow_id, paths, cv):
     global host_num, spamed
-    time.sleep(start)
+    cv.acquire()
+    cv.wait(start)
+    cv.release()
     start_time = time.time()
     #print("DEBUG", dst, paths[flow_id], paths, flow_id)
     if paths[flow_id] != {} and str(host_num) + '/' + str(dst) not in paths[flow_id]:
@@ -117,12 +119,15 @@ def spam(dst, tickrate, start, lifetime, flow_id, paths):
             post_mes(dst, host_num, "test"*1024*1024, path)
             spamed += 1
             cur_time = time.time()
+            logging.debug("%s %d %d %d" % (path, lifetime, start_time, cur_time))
             if cur_time - start_time >= lifetime:
                 logging.info("%d - %d: stopped" % (host_num, dst))
                 return
         except:
-            logging.error("err: %s", sys.exc_info())
-        time.sleep(tickrate)
+            logging.error("err src %d dst %d path %s: %s", host_num, dst, path, sys.exc_info())
+        cv.acquire()
+        cv.wait(tickrate)
+        cv.release()
 
 
 def poster():
@@ -160,26 +165,31 @@ def get_path_init(flows):
     return paths, inits
 
 
-def fill_custom_paths(paths, flow_table='flow_table'):
+def fill_custom_paths_once(paths, flow_table='flow_table'):
+    res = list()
+    with open(flow_table, "r") as f:
+        i = 0
+        for line in f:
+            new_path = path_to_map(line)[0]
+            logging.debug(new_path)
+            map_path = paths[i]
+            for key, val in new_path.items():
+                map_path[key] = val
+            res.append(map_path)
+            i += 1
+    if len(res) > 0:
+        paths = res
+
+def fill_custom_paths(paths, cv, flow_table='flow_table'):
     while True:
-        time.sleep(15)
-        res = list()
-        with open(flow_table, "r") as f:
-            i = 0
-            for line in f:
-                new_path = path_to_map(line)[0]
-                logging.debug(new_path)
-                map_path = paths[i]
-                for key, val in new_path.items():
-                    map_path[key] = val
-                res.append(map_path)
-                i += 1
-        if len(res) > 0:
-            paths = res
+        cv.acquire()
+        cv.wait(15)
+        cv.release()
+        fill_custom_paths_once(paths, flow_table)
 
 
-def unpack(init, paths):
-    return (init[0], init[1], init[2], init[3], init[4], paths)
+def unpack(init, paths, cv):
+    return (init[0], init[1], init[2], init[3], init[4], paths, cv)
 
 
 def run(server_class=HTTPServer, handler_class=MyHandler, flows_path="flows", use_path_alg=False):
@@ -187,14 +197,17 @@ def run(server_class=HTTPServer, handler_class=MyHandler, flows_path="flows", us
     host_num = int(get_my_addr().split('.')[-1])
     logging.debug("%s", get_my_addr())
     paths, inits = get_path_init(parse_inits(flows_path))
+    lock = threading.Lock()
+    cv = threading.Condition(lock)
     #TODO: move this part to thread?
     if use_path_alg:
-        threading.Thread(target=fill_custom_paths, daemon=True, args=(paths, )).start()
+        fill_custom_paths_once(paths)
+        threading.Thread(target=fill_custom_paths, daemon=True, args=(paths, cv)).start()
     #paths = fill_custom_paths(paths)
     if host_num in inits:
         logging.info("INITIATOR")
         for init in inits[host_num]:
-            p = threading.Thread(target=spam, daemon=True, args=unpack(init, paths))
+            p = threading.Thread(target=spam, daemon=True, args=unpack(init, paths, cv))
             p.start()
     server_address = ('', 8000)
     httpd = server_class(server_address, handler_class)
